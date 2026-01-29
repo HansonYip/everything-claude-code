@@ -239,9 +239,9 @@ pub fn batch_transfer(env: &Env, from: &Address, transfers: &Vec<Transfer>) {
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Transfer {
-    #[topic]  // Index for filtering (max 4 topics)
+    #[topic]  // Indexed for filtering
     pub from: Address,
-    #[topic]  // Index for filtering
+    #[topic]  // Indexed for filtering
     pub to: Address,
     pub amount: i128,  // Not indexed, in payload only
 }
@@ -252,7 +252,6 @@ Transfer { from, to, amount }.publish(env);
 
 **Event Best Practices:**
 
-- Maximum 4 topics per event for RPC filtering
 - Events are ephemeral - RPC providers keep ~1 week of history
 - Include sufficient data for downstream processes (IDs, old/new values)
 - Topics can be mixed types
