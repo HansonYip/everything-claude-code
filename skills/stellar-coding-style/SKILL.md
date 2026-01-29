@@ -5,7 +5,7 @@ description: Enforces Soroban Stellar smart contract coding style and Rust best 
 
 # Soroban Stellar Coding Style Guide
 
-Apply these coding standards when writing or reviewing Soroban smart contracts:
+Apply these coding standards when writing or reviewing Soroban smart contracts.
 
 ## 1. File Organization
 
@@ -45,6 +45,10 @@ mod storage;
 pub use errors::*;
 pub use events::*;
 ```
+
+### Keep Contracts Small and Modular
+
+Favor composing smaller, reusable contracts over monolithic designs. This makes code easier to reason about and contain potential vulnerabilities.
 
 ## 2. Naming Conventions
 
@@ -112,6 +116,14 @@ When reviewing, verify that any `.unwrap()` on storage reads corresponds to a va
 
 ## 4. Storage Patterns
 
+### Storage Type Selection
+
+| Type           | Use For                           | Key Characteristics                                  |
+| -------------- | --------------------------------- | ---------------------------------------------------- |
+| **Instance**   | Admin, config, small metadata     | Loaded every call, ~100KB limit, shares contract TTL |
+| **Persistent** | User balances, large/keyed data   | Individual TTL, archived when expired, restorable    |
+| **Temporary**  | Nonces, sessions, time-bound data | Deleted forever at expiry, lowest cost               |
+
 ### Use the #[storage] macro with appropriate types
 
 ```rust
@@ -135,17 +147,39 @@ pub enum MyStorage {
 ### DON'T: Store unbounded data in Instance storage
 
 ```rust
-// BAD - can cause DoS via storage bloat
+// BAD - can cause DoS via storage bloat (Instance has ~100KB limit)
 #[instance(Vec<Address>)]
 AllUsers,
 
-// GOOD - use Persistent with pagination
+// GOOD - use Persistent with pagination, distribute across storage slots
 #[persistent(Address)]
 User { index: u32 },
 
 #[instance(u32)]
 UserCount,
 ```
+
+### TTL Best Practices
+
+```rust
+// DON'T rely on TTL for enforcing time bounds - anyone can extend TTL
+// DO store expiration timestamps in the data itself
+
+#[contracttype]
+pub struct TimeBoundData {
+    pub value: i128,
+    pub expiry: u64,  // Always include expiry in data, not just TTL
+}
+
+// Validate expiry in code
+assert_with_error!(env, data.expiry > env.ledger().timestamp(), MyError::Expired);
+```
+
+**Key Rules:**
+
+- Never rely on TTL expiration for security - entries can be extended by anyone
+- Store absolute ledger/timestamp boundaries in data for time-based invariants
+- Temporary storage is a cost optimization, not a timing enforcement mechanism
 
 ## 5. Authorization
 
@@ -172,6 +206,31 @@ pub fn user_action(env: &Env, user: &Address, amount: i128) {
 }
 ```
 
+### require_auth Best Practices
+
+```rust
+// DO: Call require_auth early, before any state changes
+pub fn transfer(env: &Env, from: &Address, to: &Address, amount: i128) {
+    from.require_auth();  // Auth first
+    // Then proceed with logic...
+}
+
+// DO: Use require_auth_for_args for custom argument sets (with care)
+// Ensure deterministic, ledger-state-independent mapping
+pub fn batch_transfer(env: &Env, from: &Address, transfers: &Vec<Transfer>) {
+    from.require_auth_for_args((transfers.clone(),).into_val(env));
+}
+
+// DON'T: Forget that sub-contract calls handle their own auth
+// Just calling a sub-contract that uses require_auth is sufficient
+```
+
+**Security Notes:**
+
+- The Soroban host handles signatures, authentication, and replay prevention automatically
+- The `Address` type works uniformly for Stellar accounts, contracts, and contract accounts
+- Test auth logic with `env.mock_all_auths()` and verify with `env.auths()`
+
 ## 6. Events
 
 ### Define events with appropriate topics
@@ -180,7 +239,7 @@ pub fn user_action(env: &Env, user: &Address, amount: i128) {
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Transfer {
-    #[topic]  // Index for filtering
+    #[topic]  // Index for filtering (max 4 topics)
     pub from: Address,
     #[topic]  // Index for filtering
     pub to: Address,
@@ -190,6 +249,13 @@ pub struct Transfer {
 // Publish events
 Transfer { from, to, amount }.publish(env);
 ```
+
+**Event Best Practices:**
+
+- Maximum 4 topics per event for RPC filtering
+- Events are ephemeral - RPC providers keep ~1 week of history
+- Include sufficient data for downstream processes (IDs, old/new values)
+- Topics can be mixed types
 
 ## 7. Constructor Pattern
 
@@ -214,21 +280,15 @@ pub fn __constructor(
 
 ## 8. Arithmetic Safety
 
-### Always use checked arithmetic for user inputs
+### Use plain arithmetic operators - overflow panics automatically
+
+The workspace has `overflow-checks = true` in the release profile, so plain `+`, `-`, `*`, `/` will panic on overflow. This is the desired behavior for invalid inputs.
 
 ```rust
-// BAD - can overflow
+// OK - panics on overflow due to overflow-checks = true
 let total = amount_a + amount_b;
 let result = value * multiplier;
-
-// GOOD - checked operations
-let total = amount_a.checked_add(amount_b)
-    .ok_or_else(|| MyError::Overflow)?;
-let result = value.checked_mul(multiplier)
-    .ok_or_else(|| MyError::Overflow)?;
-
-// Also OK for internal constants
-let constant_sum = FIXED_A + FIXED_B;  // Constants can't overflow
+let expiry = env.ledger().timestamp() + grace_period;
 ```
 
 ### Multiply before divide for precision
@@ -239,6 +299,16 @@ let result = amount / divisor * multiplier;
 
 // GOOD - preserves precision
 let result = amount * multiplier / divisor;
+```
+
+### Never use floating-point for financial calculations
+
+```rust
+// BAD - floating point precision issues
+let fee = amount as f64 * 0.01;
+
+// GOOD - use integer math with smallest unit
+let fee = amount * FEE_BPS / 10000;  // basis points
 ```
 
 ## 9. Code Organization
@@ -263,7 +333,7 @@ pub fn set_config(env: &Env, config: &Config) { ... }
 
 ## 10. Documentation
 
-### Document public functions with Args/Returns/Panics
+### Document public functions with Args/Returns
 
 ```rust
 /// Transfers tokens from one address to another.
@@ -275,14 +345,12 @@ pub fn set_config(env: &Env, config: &Config) { ... }
 ///
 /// # Returns
 /// The new balance of the recipient
-///
-/// # Panics
-/// * `InsufficientBalance` - If sender has insufficient funds
-/// * `InvalidAmount` - If amount is zero or negative
 pub fn transfer(env: &Env, from: &Address, to: &Address, amount: i128) -> i128 {
     // ...
 }
 ```
+
+**Note**: Error conditions are defined in `errors.rs` using the `#[contract_error]` macro. Do not duplicate error documentation in `# Panics` sections.
 
 ## 11. Testing
 
@@ -315,6 +383,25 @@ fn test_transfer_succeeds_with_sufficient_balance() {
 #[should_panic(expected = "InsufficientBalance")]
 fn test_transfer_fails_with_insufficient_balance() {
     // ...
+}
+```
+
+### Test authorization logic
+
+```rust
+#[test]
+fn test_auth_required() {
+    let setup = setup();
+    setup.env.mock_all_auths();
+
+    // Call function
+    setup.contract.transfer(&from, &to, &100);
+
+    // Verify auth was required
+    assert_eq!(
+        setup.env.auths(),
+        [(from.clone(), AuthorizedInvocation { ... })]
+    );
 }
 ```
 
@@ -356,18 +443,118 @@ if let Some(value) = option {
 }
 ```
 
+### Use exhaustive pattern matching
+
+```rust
+// BAD - wildcard hides new variants
+match status {
+    Status::Active => { ... }
+    _ => { ... }  // Dangerous: new variants silently fall through
+}
+
+// GOOD - explicit handling
+match status {
+    Status::Active => { ... }
+    Status::Pending => { ... }
+    Status::Closed => { ... }
+}
+```
+
 ### Keep functions small and focused
 
 - Functions should do one thing well
 - If a function is > 50 lines, consider splitting it
 - Extract helper functions for reusable logic
+- Separate pure logic from effectful operations
+
+## 13. Security Best Practices
+
+### Never use unsafe blocks
+
+```rust
+// BAD - bypasses Rust's memory safety guarantees
+unsafe {
+    // dangerous code
+}
+
+// GOOD - use safe Rust patterns
+// If unsafe seems needed, reconsider the design
+```
+
+### Avoid unbounded operations (DoS prevention)
+
+```rust
+// BAD - unbounded loop can exhaust resources
+pub fn process_all(env: &Env, items: &Vec<Item>) {
+    for item in items.iter() {
+        process(item);
+    }
+}
+
+// GOOD - bounded iteration with pagination
+pub fn process_batch(env: &Env, items: &Vec<Item>, start: u32, limit: u32) {
+    let end = (start + limit).min(items.len() as u32);
+    for i in start..end {
+        process(&items.get(i).unwrap());
+    }
+}
+```
+
+### Validate cross-contract data
+
+```rust
+// When receiving data from external contracts via Vec<T> or Map<K,V>,
+// values converted from Val may not match expected types.
+// Validate before storing or using.
+
+pub fn receive_data(env: &Env, external_data: &Vec<i128>) {
+    for item in external_data.iter() {
+        // Validate each item before use
+        assert_with_error!(env, item >= 0, MyError::InvalidData);
+    }
+}
+```
+
+### Protect contract upgrades
+
+```rust
+// Contract WASM updates should be protected by admin authorization
+#[only_auth]
+pub fn upgrade(env: &Env, new_wasm_hash: &BytesN<32>) {
+    env.deployer().update_current_contract_wasm(new_wasm_hash);
+}
+```
+
+### Use correct operators
+
+```rust
+// BAD - ^ is XOR, not exponentiation
+let result = base ^ exponent;
+
+// GOOD - use pow() for exponentiation
+let result = base.pow(exponent);
+```
+
+## Review Scope
+
+When reviewing code:
+
+- **Skip test code**: Do not review files in `tests/` directories or code inside `#[cfg(test)]` modules
+- Focus on production contract code only
 
 ## Output Format
 
 When reviewing code, report style issues as:
 
-1. **Category**: Organization/Naming/Error/Storage/Auth/etc.
+1. **Category**: Organization/Naming/Error/Storage/Auth/Security/etc.
 2. **File**: path/to/file.rs:line
 3. **Issue**: Description of the style violation
 4. **Current**: The problematic code
 5. **Suggested**: The corrected code
+
+## References
+
+- [Stellar Docs - Storage Guide](https://developers.stellar.org/docs/build/guides/storage/choosing-the-right-storage)
+- [Stellar Docs - Authorization](https://developers.stellar.org/docs/build/smart-contracts/example-contracts/auth)
+- [Scout Soroban Detectors](https://github.com/CoinFabrik/scout-soroban)
+- [Veridise Security Checklist](https://veridise.com/blog/audit-insights/building-on-stellar-soroban-grab-this-security-checklist-to-avoid-vulnerabilities/)
