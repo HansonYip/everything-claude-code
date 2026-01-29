@@ -10,7 +10,9 @@ Apply these coding standards when writing or reviewing Soroban smart contracts:
 ## 1. File Organization
 
 ### Module Structure
+
 Every contract should follow this structure:
+
 ```
 contract-name/
 ├── Cargo.toml
@@ -25,6 +27,7 @@ contract-name/
 ```
 
 ### lib.rs Pattern
+
 ```rust
 #![no_std]
 
@@ -45,19 +48,20 @@ pub use events::*;
 
 ## 2. Naming Conventions
 
-| Element | Convention | Example |
-|---------|------------|---------|
-| Files | snake_case | `message_lib_manager.rs` |
-| Structs/Enums | PascalCase | `EndpointV2`, `PacketSent` |
-| Functions | snake_case | `send_message`, `get_config` |
-| Constants | SCREAMING_SNAKE_CASE | `MAX_COMPOSE_INDEX` |
-| Error Enums | `{Component}Error` | `EndpointError` |
-| Storage Enums | `{Component}Storage` | `EndpointStorage` |
-| Events | PascalCase noun phrase | `PacketSent`, `OwnershipTransferred` |
+| Element       | Convention             | Example                              |
+| ------------- | ---------------------- | ------------------------------------ |
+| Files         | snake_case             | `message_lib_manager.rs`             |
+| Structs/Enums | PascalCase             | `EndpointV2`, `PacketSent`           |
+| Functions     | snake_case             | `send_message`, `get_config`         |
+| Constants     | SCREAMING_SNAKE_CASE   | `MAX_COMPOSE_INDEX`                  |
+| Error Enums   | `{Component}Error`     | `EndpointError`                      |
+| Storage Enums | `{Component}Storage`   | `EndpointStorage`                    |
+| Events        | PascalCase noun phrase | `PacketSent`, `OwnershipTransferred` |
 
 ## 3. Error Handling
 
 ### DO: Use contract_error macro and assert_with_error
+
 ```rust
 #[contract_error]
 pub enum MyError {
@@ -71,21 +75,45 @@ assert_with_error!(env, amount > 0, MyError::InvalidInput);
 panic_with_error!(env, MyError::Unauthorized);
 ```
 
-### DON'T: Use unwrap/expect/panic in production
+### DON'T: Use unwrap/expect/panic on user-provided or optional data
+
 ```rust
-// BAD - can cause unexpected panics
-let value = storage.get(&key).unwrap();
+// BAD - can cause unexpected panics on user input or optional data
+let value = user_provided_option.unwrap();
 let data = some_option.expect("should exist");
 panic!("something went wrong");
 
-// GOOD - proper error handling
-let value = storage.get(&key).ok_or_else(|| MyError::NotFound)?;
+// GOOD - proper error handling for user input
+let value = user_input.ok_or_else(|| MyError::NotFound)?;
 assert_with_error!(env, some_option.is_some(), MyError::NotFound);
 ```
+
+### OK: Use .unwrap() for constructor-initialized storage
+
+Storage values that are **guaranteed to be set in `__constructor`** can safely use `.unwrap()`:
+
+```rust
+// OK - these values are always set in __constructor
+fn eid(env: &Env) -> u32 {
+    MyStorage::eid(env).unwrap()  // Set in constructor, will never be None
+}
+
+fn native_token(env: &Env) -> Address {
+    MyStorage::native_token(env).unwrap()  // Set in constructor, will never be None
+}
+
+// BAD - optional storage that may not be set
+fn zro(env: &Env) -> Option<Address> {
+    MyStorage::zro(env)  // May not be set, return Option
+}
+```
+
+When reviewing, verify that any `.unwrap()` on storage reads corresponds to a value initialized in `__constructor`.
 
 ## 4. Storage Patterns
 
 ### Use the #[storage] macro with appropriate types
+
 ```rust
 #[storage]
 pub enum MyStorage {
@@ -105,6 +133,7 @@ pub enum MyStorage {
 ```
 
 ### DON'T: Store unbounded data in Instance storage
+
 ```rust
 // BAD - can cause DoS via storage bloat
 #[instance(Vec<Address>)]
@@ -121,6 +150,7 @@ UserCount,
 ## 5. Authorization
 
 ### Use the three-tier auth system
+
 ```rust
 // Tier 1: Contract uses #[lz_contract] (includes #[ownable])
 #[lz_contract]
@@ -145,6 +175,7 @@ pub fn user_action(env: &Env, user: &Address, amount: i128) {
 ## 6. Events
 
 ### Define events with appropriate topics
+
 ```rust
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -162,7 +193,8 @@ Transfer { from, to, amount }.publish(env);
 
 ## 7. Constructor Pattern
 
-### Always use __constructor with proper initialization
+### Always use \_\_constructor with proper initialization
+
 ```rust
 pub fn __constructor(
     env: &Env,
@@ -183,6 +215,7 @@ pub fn __constructor(
 ## 8. Arithmetic Safety
 
 ### Always use checked arithmetic for user inputs
+
 ```rust
 // BAD - can overflow
 let total = amount_a + amount_b;
@@ -199,6 +232,7 @@ let constant_sum = FIXED_A + FIXED_B;  // Constants can't overflow
 ```
 
 ### Multiply before divide for precision
+
 ```rust
 // BAD - loses precision
 let result = amount / divisor * multiplier;
@@ -210,6 +244,7 @@ let result = amount * multiplier / divisor;
 ## 9. Code Organization
 
 ### Group related functions with section comments
+
 ```rust
 // ============================================================================
 // View Functions
@@ -229,6 +264,7 @@ pub fn set_config(env: &Env, config: &Config) { ... }
 ## 10. Documentation
 
 ### Document public functions with Args/Returns/Panics
+
 ```rust
 /// Transfers tokens from one address to another.
 ///
@@ -251,6 +287,7 @@ pub fn transfer(env: &Env, from: &Address, to: &Address, amount: i128) -> i128 {
 ## 11. Testing
 
 ### Use setup helpers and descriptive test names
+
 ```rust
 struct TestSetup<'a> {
     env: Env,
@@ -284,6 +321,7 @@ fn test_transfer_fails_with_insufficient_balance() {
 ## 12. General Rust Best Practices
 
 ### Prefer immutability
+
 ```rust
 // Prefer let over let mut
 let value = calculate_value();
@@ -296,6 +334,7 @@ for item in items {
 ```
 
 ### Use pattern matching over if-else chains
+
 ```rust
 // BAD
 if option.is_some() {
@@ -318,6 +357,7 @@ if let Some(value) = option {
 ```
 
 ### Keep functions small and focused
+
 - Functions should do one thing well
 - If a function is > 50 lines, consider splitting it
 - Extract helper functions for reusable logic
@@ -325,6 +365,7 @@ if let Some(value) = option {
 ## Output Format
 
 When reviewing code, report style issues as:
+
 1. **Category**: Organization/Naming/Error/Storage/Auth/etc.
 2. **File**: path/to/file.rs:line
 3. **Issue**: Description of the style violation
