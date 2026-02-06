@@ -93,6 +93,34 @@ pub fn set_config(env: &Env, config: &Config) { ... }
 - [ ] Use `BytesN<32>` for fixed-size byte arrays
 - [ ] Leverage `env.storage()` methods appropriately
 - [ ] Keep contracts small and modular - favor composition over monolithic designs
+- [ ] Public function parameters follow value/ref convention (see below)
+
+### Parameter Passing Convention
+
+Public contract interfaces must follow this rule:
+
+| Type category | Pass by | Examples |
+| ------------- | ------- | -------- |
+| Rust primitives | **value** | `u32`, `u64`, `i128`, `bool` |
+| Everything else | **reference (`&`)** | `&Env`, `&Address`, `&Bytes`, `&BytesN<32>`, `&Vec<T>`, `&Map<K,V>`, custom structs |
+
+```rust
+// GOOD
+pub fn clear(
+    env: &Env,
+    caller: &Address,
+    guid: &BytesN<32>,
+    prim_type: u32,        // primitive → value
+)
+
+// BAD — non-primitive passed by value
+pub fn clear(
+    env: Env,              // ❌ should be &Env
+    caller: Address,       // ❌ should be &Address
+    guid: BytesN<32>,      // ❌ should be &BytesN<32>
+    prim_type: u32,        // ✅ primitive, value is correct
+)
+```
 
 ---
 
