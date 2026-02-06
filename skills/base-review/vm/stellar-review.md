@@ -427,6 +427,39 @@ Documentation constraints are specifications that code must enforce:
 
 3. **Flag gaps** - documented constraints without code enforcement are bugs
 
+### Comment Accuracy Verification
+
+**Every comment must accurately reflect the code it describes.** This is a mandatory review step.
+
+For each file under review:
+
+1. **Read every comment** (doc comments `///` `//!`, inline comments `//`)
+2. **Read the code** it describes
+3. **Verify alignment** — does the comment match what the code actually does?
+
+**Check these specifically:**
+
+| What to Verify | How |
+| --- | --- |
+| Function doc vs function body | Does the doc description match the actual logic? |
+| Parameter docs vs actual params | Are all params listed? Are descriptions correct? |
+| Method/field listings | Are all items listed? Any omissions? |
+| Code examples in docs | Do examples match actual generated/expected code? |
+| Inline comments | Does `// does X` actually describe what the next line does? |
+| Module docs | Does the module description match its actual contents? |
+| Trait method counts | If doc says "both A and B", does code really only produce A and B? |
+
+**Flag as ⚠️ WARNING:**
+- Wrong method/function name in comment
+- Incomplete listing (e.g., lists 3 of 6 methods)
+- Stale comment after refactor (describes old logic)
+- "Conceptual" code examples that are functionally wrong
+
+**Flag as ❌ CRITICAL:**
+- Comment omits security-critical behavior (e.g., missing `freeze()` from upgrade docs)
+- Comment describes wrong access control model
+- Comment says auth is required but code doesn't enforce it (or vice versa)
+
 ---
 
 ## 4. Error Handling

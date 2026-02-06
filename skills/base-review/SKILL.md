@@ -34,6 +34,7 @@ The VM guide contains everything needed for the review:
 3. **Security Vulnerabilities** — VM-specific checklist and grep patterns
 4. **Error Handling** — Proper error patterns for the platform
 5. **Testing Requirements** — Platform-specific test patterns
+6. **Comment Accuracy** — Verify every comment reflects the actual code logic
 
 **Follow the VM guide's Security Scan section** for grep patterns to identify high-risk code.
 
@@ -63,6 +64,10 @@ Path B: valid hash [0xab; 32] → should be ACCEPTED
 | `<` vs `<=`     | Boundary          | Test exact boundary |
 | Comment vs Code | Mismatch          | Verify alignment    |
 
+## Step 4: Comment & Documentation Accuracy
+
+Verify every comment and doc comment accurately reflects the actual code logic. **Follow the VM guide's Comment Accuracy Verification section** for detailed instructions and classification criteria.
+
 ## Output Format
 
 ```markdown
@@ -86,6 +91,7 @@ Path B: valid hash [0xab; 32] → should be ACCEPTED
 | Platform Constraints      |     |     |     |
 | Security Vulnerabilities  |     |     |     |
 | Error Handling            |     |     |     |
+| Comment Accuracy          |     |     |     |
 
 ## Detailed Findings
 
