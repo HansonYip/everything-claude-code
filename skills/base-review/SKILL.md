@@ -1,6 +1,6 @@
 ---
 name: base-review
-description: Universal smart contract security review covering language best practices, platform constraints, and common vulnerabilities. Use when reviewing any smart contract code regardless of protocol.
+description: Reviews smart contract code for language best practices, platform constraints, common security vulnerabilities, and documentation accuracy — independent of protocol-specific business logic.
 argument-hint: '[contract-path]'
 allowed-tools:
     - Read
@@ -11,21 +11,38 @@ allowed-tools:
 
 # Universal Smart Contract Review
 
-Performs a comprehensive security review applicable to **any** smart contract, regardless of protocol or business logic.
+## Workflow
 
-## Step 1: Detect VM & Load Guide
+### Step 0: Validate Input
+
+If no contract path argument is provided, **stop immediately** and return:
+
+> ❌ **Missing argument**: Please provide a contract path. Usage: `/base-review [contract-path]`
+
+Do not proceed with the review.
+
+### Step 1: Detect VM & Load Guide
 
 Detect target VM from file extensions and load the corresponding guide:
 
-| Extension | VM      | Guide                    |
-| --------- | ------- | ------------------------ |
-| `.rs`     | stellar | `./vm/stellar-review.md` |
-| `.sol`    | evm     | `./vm/evm-review.md`     |
-| `.move`   | move    | `./vm/move-review.md`    |
+| Extension | VM      | Guide                    | Verification                              |
+| --------- | ------- | ------------------------ | ----------------------------------------- |
+| `.rs`     | stellar | `./vm/stellar-review.md` | `Cargo.toml` contains `soroban-sdk` dep   |
 
-**Note**: Currently only Stellar/Soroban is fully supported.
+**Detection steps:**
+1. Match the file extension against the table above.
+2. If matched, run the verification check (e.g., look for `soroban-sdk` in the nearest `Cargo.toml`).
+3. If verification fails, **stop immediately** and return:
 
-## Step 2: Execute VM-Specific Review
+> ❌ **VM verification failed**: File is `.rs` but no `soroban-sdk` dependency found in `Cargo.toml`. This does not appear to be a Soroban contract.
+
+If the file extension does not match any row in the table, **stop immediately** and return:
+
+> ❌ **Unsupported VM**: Could not detect a supported VM from the file extension `.[ext]`. Supported extensions: `.rs` (Stellar/Soroban).
+
+Do not proceed with the review.
+
+### Step 2: Execute VM-Specific Review
 
 The VM guide contains everything needed for the review:
 
@@ -33,40 +50,12 @@ The VM guide contains everything needed for the review:
 2. **Platform Constraints** — Storage model, resource limits, authorization
 3. **Security Vulnerabilities** — VM-specific checklist and grep patterns
 4. **Error Handling** — Proper error patterns for the platform
-5. **Testing Requirements** — Platform-specific test patterns
-6. **Comment Accuracy** — Verify every comment reflects the actual code logic
+5. **Events** — Event emission and structure
+6. **Constructor Pattern** — Initialization and setup patterns
+7. **Documentation** — Doc comments and inline comment accuracy
+8. **Logic Tracing** — Trace every assertion and conditional through both paths
 
 **Follow the VM guide's Security Scan section** for grep patterns to identify high-risk code.
-
-## Step 3: Logic Tracing
-
-**CRITICAL: Never assume an assertion is correct. Trace both paths:**
-
-```
-# Example: assert_with_error!(env, payload_hash == empty_hash, Error)
-
-Path A: empty hash [0x00; 32] → should be REJECTED
-  payload_hash == empty_hash → TRUE
-  assert_with_error! panics when FALSE → No panic
-  Result: ACCEPTED ← BUG!
-
-Path B: valid hash [0xab; 32] → should be ACCEPTED
-  payload_hash == empty_hash → FALSE
-  assert_with_error! panics when FALSE → PANIC
-  Result: REJECTED ← BUG!
-```
-
-**High-Risk Patterns (Extra Scrutiny):**
-
-| Pattern         | Risk              | Check               |
-| --------------- | ----------------- | ------------------- |
-| `==` vs `!=`    | Boolean inversion | Trace both paths    |
-| `<` vs `<=`     | Boundary          | Test exact boundary |
-| Comment vs Code | Mismatch          | Verify alignment    |
-
-## Step 4: Comment & Documentation Accuracy
-
-Verify every comment and doc comment accurately reflects the actual code logic. **Follow the VM guide's Comment Accuracy Verification section** for detailed instructions and classification criteria.
 
 ## Output Format
 
@@ -83,6 +72,10 @@ Verify every comment and doc comment accurately reflects the actual code logic. 
 
 [⚠️ Should fix items]
 
+## Info
+
+[ℹ️ Low-severity / enhancement items]
+
 ## Checklist Summary
 
 | Category                  | ✅  | ❌  | ⚠️  |
@@ -91,7 +84,9 @@ Verify every comment and doc comment accurately reflects the actual code logic. 
 | Platform Constraints      |     |     |     |
 | Security Vulnerabilities  |     |     |     |
 | Error Handling            |     |     |     |
-| Comment Accuracy          |     |     |     |
+| Events                    |     |     |     |
+| Constructor Pattern       |     |     |     |
+| Documentation             |     |     |     |
 
 ## Detailed Findings
 

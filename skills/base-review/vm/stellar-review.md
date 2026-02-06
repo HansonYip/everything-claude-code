@@ -86,60 +86,6 @@ pub fn get_total_supply(env: &Env) -> i128 { ... }
 pub fn set_config(env: &Env, config: &Config) { ... }
 ```
 
-### General Rust Best Practices
-
-**Prefer immutability:**
-
-```rust
-// Prefer let over let mut
-let value = calculate_value();
-
-// Only use mut when necessary
-let mut accumulator = 0;
-for item in items {
-    accumulator += item.value;
-}
-```
-
-**Use pattern matching over if-else chains:**
-
-```rust
-// GOOD - match extracts value directly
-match option {
-    Some(value) => { /* use value */ }
-    None => { /* handle none */ }
-}
-
-// Also GOOD - if-let for single variant
-if let Some(value) = option {
-    // use value
-}
-```
-
-**Use exhaustive pattern matching:**
-
-```rust
-// BAD - wildcard hides new variants
-match status {
-    Status::Active => { ... }
-    _ => { ... }  // Dangerous: new variants silently fall through
-}
-
-// GOOD - explicit handling
-match status {
-    Status::Active => { ... }
-    Status::Pending => { ... }
-    Status::Closed => { ... }
-}
-```
-
-**Keep functions small and focused:**
-
-- Functions should do one thing well
-- If a function is > 50 lines, consider splitting it
-- Extract helper functions for reusable logic
-- Separate pure logic from effectful operations
-
 ### Soroban-Specific Patterns
 
 - [ ] Use `#[contracttype]` for custom types
@@ -220,20 +166,10 @@ assert_with_error!(env, data.expiry > env.ledger().timestamp(), MyError::Expired
 ### Resource Limits
 
 - CPU instructions: ~100M per transaction
-- Memory: Limited by Soroban VM
-- Storage reads/writes: Counted and limited
 
 ---
 
 ## 3. Security Vulnerabilities
-
-### Security Concerns
-
-| Concern                | Description                                 |
-| ---------------------- | ------------------------------------------- |
-| TTL expiration attacks | Expired data requires extra gas to restore  |
-| Auth confusion         | Missing or incorrect `require_auth()` calls |
-| Address type mismatch  | Confusing `Address` with `BytesN<32>`       |
 
 ### Security Vulnerability Checklist
 
@@ -292,30 +228,7 @@ Use these grep patterns to identify high-risk code areas.
 
 ### Authorization
 
-**Use the three-tier auth system:**
-
-```rust
-// Tier 1: Contract uses #[lz_contract] (includes #[ownable])
-#[lz_contract]
-pub struct MyContract;
-
-// Tier 2: Protected functions use #[only_auth]
-#[contract_impl]
-impl MyContract {
-    #[only_auth]
-    pub fn admin_function(env: &Env) {
-        // Only owner can call
-    }
-}
-
-// Tier 3: User auth with require_auth
-pub fn user_action(env: &Env, user: &Address, amount: i128) {
-    user.require_auth();
-    // User authorized this call
-}
-```
-
-**require_auth Best Practices:**
+**Standard Soroban auth (`require_auth`):**
 
 ```rust
 // DO: Call require_auth early, before any state changes
@@ -329,16 +242,28 @@ pub fn transfer(env: &Env, from: &Address, to: &Address, amount: i128) {
 pub fn batch_transfer(env: &Env, from: &Address, transfers: &Vec<Transfer>) {
     from.require_auth_for_args((transfers.clone(),).into_val(env));
 }
-
-// DON'T: Forget that sub-contract calls handle their own auth
-// Just calling a sub-contract that uses require_auth is sufficient
 ```
 
-**Security Notes:**
-
+- Call `require_auth` before any state changes
+- Sub-contract calls handle their own auth — no need to re-check
 - The Soroban host handles signatures, authentication, and replay prevention automatically
-- The `Address` type works uniformly for Stellar accounts, contracts, and contract accounts
-- Test auth logic with `env.mock_all_auths()` and verify with `env.auths()`
+
+**LayerZero macro auth (if using `lz-soroban-sdk`):**
+
+```rust
+// #[lz_contract] includes #[ownable] — provides owner management
+#[lz_contract]
+pub struct MyContract;
+
+// #[only_auth] on a function restricts it to the owner
+#[contract_impl]
+impl MyContract {
+    #[only_auth]
+    pub fn admin_function(env: &Env) { ... }
+}
+```
+
+When reviewing LZ contracts, verify that `#[only_auth]` is applied to all admin-only functions.
 
 ### Arithmetic Safety
 
@@ -369,16 +294,6 @@ let fee = amount as f64 * 0.01;
 
 // GOOD - use integer math with smallest unit
 let fee = amount * FEE_BPS / 10000;  // basis points
-```
-
-**Use correct operators:**
-
-```rust
-// BAD - ^ is XOR, not exponentiation
-let result = base ^ exponent;
-
-// GOOD - use pow() for exponentiation
-let result = base.pow(exponent);
 ```
 
 ### Cross-Contract Data Validation
@@ -412,53 +327,33 @@ When functions have variants (e.g., admin vs user, default vs custom, internal v
 
 3. **Flag inconsistencies** - validation in one but not the other is a bug
 
-### Doc-to-Code Verification
+### Documentation & Comment Verification
 
-Documentation constraints are specifications that code must enforce:
+**Every comment and doc constraint must accurately reflect the code.** This is a mandatory review step.
 
-1. **Extract constraints** from doc comments:
+**1. Extract constraints** from doc comments — these are implicit specs:
 
-    - "must be/not be" → assertion required
-    - "requires" → precondition check required
-    - "only when/if" → conditional guard required
-    - "valid/invalid" → validation function required
+| Keyword in doc        | Required enforcement     |
+| --------------------- | ------------------------ |
+| "must be/not be"      | assertion                |
+| "requires"            | precondition check       |
+| "only when/if"        | conditional guard        |
+| "valid/invalid"       | validation function      |
 
-2. **Verify enforcement** - for each constraint, locate corresponding code check
+**2. Verify all comments match code:**
 
-3. **Flag gaps** - documented constraints without code enforcement are bugs
+| What to Verify                | Check                                                     |
+| ----------------------------- | --------------------------------------------------------- |
+| Function doc vs function body | Does the description match the actual logic?              |
+| Parameter docs vs params      | All params listed? Descriptions correct?                  |
+| Inline comments               | Does `// does X` match what the next line does?           |
+| Code examples in docs         | Do examples match actual generated/expected code?         |
+| Module docs                   | Does the module description match its contents?           |
 
-### Comment Accuracy Verification
+**3. Flag gaps:**
 
-**Every comment must accurately reflect the code it describes.** This is a mandatory review step.
-
-For each file under review:
-
-1. **Read every comment** (doc comments `///` `//!`, inline comments `//`)
-2. **Read the code** it describes
-3. **Verify alignment** — does the comment match what the code actually does?
-
-**Check these specifically:**
-
-| What to Verify | How |
-| --- | --- |
-| Function doc vs function body | Does the doc description match the actual logic? |
-| Parameter docs vs actual params | Are all params listed? Are descriptions correct? |
-| Method/field listings | Are all items listed? Any omissions? |
-| Code examples in docs | Do examples match actual generated/expected code? |
-| Inline comments | Does `// does X` actually describe what the next line does? |
-| Module docs | Does the module description match its actual contents? |
-| Trait method counts | If doc says "both A and B", does code really only produce A and B? |
-
-**Flag as ⚠️ WARNING:**
-- Wrong method/function name in comment
-- Incomplete listing (e.g., lists 3 of 6 methods)
-- Stale comment after refactor (describes old logic)
-- "Conceptual" code examples that are functionally wrong
-
-**Flag as ❌ CRITICAL:**
-- Comment omits security-critical behavior (e.g., missing `freeze()` from upgrade docs)
-- Comment describes wrong access control model
-- Comment says auth is required but code doesn't enforce it (or vice versa)
+- **❌ CRITICAL**: Comment omits security-critical behavior, describes wrong access control, or claims auth exists when it doesn't (or vice versa)
+- **⚠️ WARNING**: Wrong name in comment, incomplete listing, stale comment after refactor, functionally wrong examples
 
 ---
 
@@ -513,18 +408,6 @@ fn zro(env: &Env) -> Option<Address> {
 ```
 
 When reviewing, verify that any `.unwrap()` on storage reads corresponds to a value initialized in `__constructor`.
-
-### Error Mapping (EVM → Stellar)
-
-```
-EVM                    Stellar/Rust
-─────────────────────────────────────
-LZ_InvalidNonce     →  Error::InvalidNonce
-LZ_Unauthorized     →  Error::Unauthorized
-LZ_NotRegistered    →  Error::NotRegistered
-LZ_InvalidEid       →  Error::InvalidEndpointId
-LZ_InsufficientFee  →  Error::InsufficientFee
-```
 
 ---
 
@@ -598,62 +481,7 @@ pub fn __constructor(
 
 ---
 
-## 7. Testing
-
-### Use setup helpers and descriptive test names
-
-```rust
-struct TestSetup<'a> {
-    env: Env,
-    admin: Address,
-    contract: MyContractClient<'a>,
-}
-
-fn setup() -> TestSetup<'static> {
-    let env = Env::default();
-    let admin = Address::generate(&env);
-    let contract_id = env.register(MyContract, (&admin,));
-    let contract = MyContractClient::new(&env, &contract_id);
-    TestSetup { env, admin, contract }
-}
-
-#[test]
-fn test_transfer_succeeds_with_sufficient_balance() {
-    let setup = setup();
-    // Arrange
-    // Act
-    // Assert
-}
-
-#[test]
-#[should_panic(expected = "InsufficientBalance")]
-fn test_transfer_fails_with_insufficient_balance() {
-    // ...
-}
-```
-
-### Test authorization logic
-
-```rust
-#[test]
-fn test_auth_required() {
-    let setup = setup();
-    setup.env.mock_all_auths();
-
-    // Call function
-    setup.contract.transfer(&from, &to, &100);
-
-    // Verify auth was required
-    assert_eq!(
-        setup.env.auths(),
-        [(from.clone(), AuthorizedInvocation { ... })]
-    );
-}
-```
-
----
-
-## 8. Documentation
+## 7. Documentation
 
 ### Document public functions with Args/Returns
 
@@ -676,28 +504,33 @@ pub fn transfer(env: &Env, from: &Address, to: &Address, amount: i128) -> i128 {
 
 ---
 
-## 9. Review Workflow
+## 8. Logic Tracing
 
-### Review Scope
+**CRITICAL: Never assume an assertion is correct. Trace both paths.**
 
-When reviewing code:
+For every `assert_with_error!`, `if`/`else`, and comparison operator, trace what happens with each possible input:
 
-- **Skip test code**: Do not review files in `tests/` directories or code inside `#[cfg(test)]` modules
-- Focus on production contract code only
-
-### Build & Test
-
-```bash
-# 1. Format and lint
-cargo fmt --check
-cargo clippy -- -D warnings
-
-# 2. Build
-stellar contract build
-
-# 3. Test
-cargo test
 ```
+# assert_with_error!(env, payload_hash == empty_hash, Error)
+
+Path A: empty hash [0x00; 32] → should be REJECTED
+  payload_hash == empty_hash → TRUE
+  assert_with_error! panics when FALSE → No panic
+  Result: ACCEPTED ← BUG!
+
+Path B: valid hash [0xab; 32] → should be ACCEPTED
+  payload_hash == empty_hash → FALSE
+  assert_with_error! panics when FALSE → PANIC
+  Result: REJECTED ← BUG!
+```
+
+**High-Risk Patterns (Extra Scrutiny):**
+
+| Pattern         | Risk              | Check               |
+| --------------- | ----------------- | ------------------- |
+| `==` vs `!=`    | Boolean inversion | Trace both paths    |
+| `<` vs `<=`     | Boundary          | Test exact boundary |
+| Comment vs Code | Mismatch          | Verify alignment    |
 
 ---
 
