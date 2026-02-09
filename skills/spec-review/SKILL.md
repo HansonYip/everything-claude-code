@@ -34,9 +34,18 @@ Step 2: Compare each function in parallel
 Step 3: Aggregate results
 ```
 
-### Step 0: Detect Project Type
+### Step 0: Detect Project Type and Locate Spec
 
-Analyze the contract path to determine which spec to use.
+First, locate the specs directory by finding this SKILL.md file's sibling `specs/` folder:
+
+```
+Use Glob to find `**/skills/spec-review/specs/endpoint-spec.md`
+Extract the parent directory path → this is {SPECS_DIR}
+```
+
+Store `{SPECS_DIR}` as the **absolute path** to the specs directory. All spec file reads in subsequent steps MUST use `{SPECS_DIR}/{matched-spec}.md`.
+
+Then analyze the contract path to determine which spec to use.
 
 **Mapping Rules:**
 
@@ -63,7 +72,7 @@ Available specs:
 - pricefeed-spec.md  → PriceFeed contracts (path contains "pricefeed" or "price_feed")
 
 To add support for a new project type:
-1. Create a spec file in ./specs/{project}-spec.md
+1. Create a spec file in {SPECS_DIR}/{project}-spec.md
 2. Follow the Spec Format Requirements below
 ```
 
@@ -71,7 +80,7 @@ To add support for a new project type:
 
 ### Step 1: Extract Function List
 
-Read `./specs/{matched-spec}.md` and extract all function definitions.
+Read `{SPECS_DIR}/{matched-spec}.md` and extract all function definitions.
 
 **Validation:** Check if spec contains `## Public Interface` section.
 
@@ -111,7 +120,7 @@ Spawn a sub-agent for each function:
 Task(subagent_type="general-purpose", prompt="""
 ## Function Comparison: {FUNC_NAME}
 
-**Spec Requirements** ({SPEC_FILE}):
+**Spec Requirements** (from `{SPECS_DIR}/{SPEC_FILE}`):
 {SPEC_REQUIREMENTS}
 
 **Tasks**:

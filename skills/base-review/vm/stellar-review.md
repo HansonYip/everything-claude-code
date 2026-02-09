@@ -504,6 +504,7 @@ Transfer { from, to, amount }.publish(env);
 - Events are ephemeral - RPC providers keep ~1 week of history
 - Include sufficient data for downstream processes (IDs, old/new values)
 - Topics can be mixed types
+- There is **no limit** on the number of `#[topic]` fields per event (the previous 4-topic limit was [removed](https://github.com/stellar/rs-soroban-env/pull/959))
 
 ### Alternative publish syntax
 

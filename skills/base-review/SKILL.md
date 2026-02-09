@@ -23,11 +23,20 @@ Do not proceed with the review.
 
 ### Step 1: Detect VM & Load Guide
 
+First, locate the VM guides directory by finding this skill's sibling `vm/` folder:
+
+```
+Use Glob to find `**/skills/base-review/vm/stellar-review.md`
+Extract the parent directory path → this is {VM_DIR}
+```
+
+Store `{VM_DIR}` as the **absolute path** to the vm directory. All guide file reads MUST use `{VM_DIR}/{guide-file}`.
+
 Detect target VM from file extensions and load the corresponding guide:
 
-| Extension | VM      | Guide                    | Verification                              |
-| --------- | ------- | ------------------------ | ----------------------------------------- |
-| `.rs`     | stellar | `./vm/stellar-review.md` | `Cargo.toml` contains `soroban-sdk` dep   |
+| Extension | VM      | Guide                            | Verification                              |
+| --------- | ------- | -------------------------------- | ----------------------------------------- |
+| `.rs`     | stellar | `{VM_DIR}/stellar-review.md`     | `Cargo.toml` contains `soroban-sdk` dep   |
 
 **Detection steps:**
 1. Match the file extension against the table above.
