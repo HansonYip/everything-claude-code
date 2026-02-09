@@ -122,6 +122,47 @@ pub fn clear(
 )
 ```
 
+### Qualified Paths in `#[contract_trait]` Methods
+
+Methods defined inside a `#[contract_trait]` trait **must** use fully qualified paths for all non-primitive types in parameters and return types. The macro expands trait methods into a generated module where short names are not in scope.
+
+This applies to **all** types — `soroban_sdk`, crate-local, and third-party — not just SDK types.
+
+```rust
+#[contract_trait]
+pub trait MyTrait: Auth {
+    // GOOD — all types use fully qualified paths
+    fn set_signer(env: &soroban_sdk::Env, signer: &soroban_sdk::BytesN<20>, active: bool) {
+        // ...
+    }
+
+    fn get_signers(env: &soroban_sdk::Env) -> soroban_sdk::Vec<soroban_sdk::BytesN<20>> {
+        // ...
+    }
+
+    fn owner(env: &soroban_sdk::Env) -> Option<soroban_sdk::Address> {
+        // ...
+    }
+
+    fn get_config(env: &soroban_sdk::Env) -> crate::types::TtlConfig {
+        // ...
+    }
+
+    // BAD — unqualified types will fail macro expansion
+    fn set_signer(env: &Env, signer: &BytesN<20>, active: bool) { // ❌
+        // ...
+    }
+
+    fn get_config(env: &Env) -> TtlConfig { // ❌
+        // ...
+    }
+}
+```
+
+**Note:** Rust primitives (`u32`, `u64`, `i128`, `bool`) and standard prelude types (`Option<T>`) do not need qualification — only types that require a `use` import do.
+
+**Review procedure:** For every `#[contract_trait]`, check **each** method signature individually — verify every parameter type and return type is fully qualified. Do not sample or assume consistency within a trait. A single unqualified type in one method is a bug even if all other methods are correct.
+
 ---
 
 ## 2. Platform Constraints
