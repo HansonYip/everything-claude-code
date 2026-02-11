@@ -260,7 +260,7 @@ assert_with_error!(env, data.expiry > env.ledger().timestamp(), MyError::Expired
 
 - [ ] **DoS via Unbounded Operations**: Loops have size limits, use pagination
 - [ ] **Instance Storage Bloat**: No unbounded data in Instance storage — See [Section 2](#dont-store-unbounded-data-in-instance-storage)
-- [ ] **State Archival**: Critical Persistent storage has `extend_ttl()` calls — See [Section 2 TTL Best Practices](#ttl-best-practices)
+- [ ] **State Archival**: Critical Persistent storage has `extend_ttl()` calls — See [Section 2 TTL Best Practices](#ttl-best-practices). **Note:** The `#[storage]` macro automatically extends TTL on every `get`, `set`, and `has` call for `#[persistent]` variants (via `auto_ttl`). Only flag missing TTL if the code uses raw `env.storage().persistent()` calls without the macro.
 
 #### Low/Enhancement
 
